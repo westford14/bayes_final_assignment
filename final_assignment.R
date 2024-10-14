@@ -310,7 +310,9 @@ train_test_split <- function(data, holdout = 0.1) {
 feature_selection <- function(data, output, seed, draws, cores) {
   info(
     logger,
-    msg = "fitting model for feature selection"
+    msg = "fitting model for feature selection",
+    cores = cores,
+    seed = seed
   )
   feature_model <- brm(
     formula = "medv ~ (.)",
@@ -321,6 +323,17 @@ feature_selection <- function(data, output, seed, draws, cores) {
     cores = cores
   )
 
+  # Create a cluster of `cores` size
+  cl <- makeCluster(cores, outfile = "")
+  registerDoSNOW(cl)
+
+  info(
+    logger,
+    msg = "running parallel feature selection",
+    cores = cores,
+    seed = seed
+  )
+  # limiting the space to speed up computation time
   cvs <- cv_varsel(
     feature_model,
     refit_prj = FALSE,
@@ -328,6 +341,14 @@ feature_selection <- function(data, output, seed, draws, cores) {
     parallel = TRUE,
     seed = seed
   )
+
+  # Kill the cluster
+  stopCluster(cl)
+  info(
+    logger,
+    msg = "parallel feature selection run completed!"
+  )
+
   varsel_plot <- plot(cvs, stats = c("elpd", "rmse"))
 
   info(
@@ -361,25 +382,21 @@ feature_selection <- function(data, output, seed, draws, cores) {
   priors <- c()
   for (x in seq_along(best_variables)) {
     if (best_variables[x] %in% c("chas", "rad", "lstat", "rm")) {
-      priors <- c(
+      priors <- append(
         priors,
-        c(
-          set_prior(
-            "normal(0, 10)",
-            class = "b",
-            coef = best_variables[x]
-          )
+        set_prior(
+          "normal(0, 10)",
+          class = "b",
+          coef = best_variables[x]
         )
       )
     } else {
-      priors <- c(
+      priors <- append(
         priors,
-        c(
-          set_prior(
-            "normal(0, 10)",
-            class = "b",
-            coef = paste("s", best_variables[x], "_1", sep = "")
-          )
+        set_prior(
+          "normal(0, 10)",
+          class = "b",
+          coef = paste("s", best_variables[x], "_1", sep = "")
         )
       )
     }
@@ -392,7 +409,7 @@ feature_selection <- function(data, output, seed, draws, cores) {
         )
       }
     } else if (x == length(best_variables)) {
-      if (best_variables[x] %in% c("chas", "rad")) {
+      if (best_variables[x] %in% c("chas", "rad", "lstat", "rm")) {
         form <- paste(form, best_variables[x], sep = " ")
       } else {
         form <- paste(
@@ -675,8 +692,8 @@ generate_diagnostics <- function(model, data, output) {
 model_search <- function(data, draws, holdout, seed, cores, output) {
   selected_features <- feature_selection(data, output, seed, draws / 2, cores)
   models <- list(
-    rooms = list(
-      formula = "medv ~ rm",
+    base_linear = list(
+      formula = "medv ~ rm + lstat",
       priors = c(
         set_prior("normal(0, 10)", class = "b", coef = "lstat"),
         set_prior("normal(0, 10)", class = "b", coef = "rm")
@@ -735,7 +752,8 @@ model_search <- function(data, draws, holdout, seed, cores, output) {
 
   info(
     logger,
-    msg = "starting parallel run ..."
+    msg = "starting parallel run ...",
+    cores = cores
   )
 
   # Create a cluster of `cores` size
@@ -764,6 +782,7 @@ model_search <- function(data, draws, holdout, seed, cores, output) {
     )
     return(list(list(
       "fitted_model" = output$fitted_model,
+      "prior_model" = output$prior_model,
       "formula" = models[[i]]$formula,
       "name" = names(models)[i],
       "loo" = output$loo
@@ -774,7 +793,7 @@ model_search <- function(data, draws, holdout, seed, cores, output) {
   stopCluster(cl)
   info(
     logger,
-    "parallel run completed!"
+    msg = "parallel run completed!"
   )
 
   # Find the best fitted model
@@ -950,7 +969,7 @@ if (output == ".") {
 if (draws %% 1 != 0 || draws < 5000) {
   error(
     logger,
-    paste(
+    msg = paste(
       "please use am integer larger than 5000, ",
       draws,
       " does not conform to this",
@@ -963,7 +982,7 @@ if (draws %% 1 != 0 || draws < 5000) {
 if (grepl("Rdata", file, fixed = TRUE)) {
   error(
     logger,
-    paste(
+    msg = paste(
       "file should be an 'Rdata' file ",
       file,
       " does not conform to this",
