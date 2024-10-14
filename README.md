@@ -98,21 +98,21 @@ Below are the important variables to set:
 An example of running the code via `Rscript` is below:
 
 ```bash
-Rscript assignment_2.R --file BostonHousing.RData
+Rscript final_assignment.R --file BostonHousing.RData
 ```
 
 This will set reasonable default arguments for all variables, but if you would
 like to see this expanded to all default variables:
 
 ```bash
-Rscript assignment_2.R --file BostonHousing.RData --seed 42 --draws 10000 --output . --cores 0 --holdout 0.1
+Rscript final_assignment.R --file BostonHousing.RData --seed 42 --draws 10000 --output . --cores 0 --holdout 0.1
 ```
 
 There will be a number of log messages generated, but once the script is finished 
 running you will result in a folder structure like:
 
 ```
-(base) ➜  assignment_2 tree .
+(base) ➜  final_assignment tree .
 .
 ├── README.md
 ├── BostonHousing.RData
