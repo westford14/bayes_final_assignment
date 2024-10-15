@@ -543,7 +543,7 @@ run_single_model <- function(specification_list, draws, data, seed) {
     cores = 1,
     iter = draws,
     prior = specification_list$priors,
-    control = list(adapt_delta = 0.9)
+    control = list(adapt_delta = 0.95)
   )
   loo_output <- loo::loo(temp)
 
@@ -560,7 +560,7 @@ run_single_model <- function(specification_list, draws, data, seed) {
     iter = draws,
     sample_prior = "only",
     prior = specification_list$priors,
-    control = list(adapt_delta = 0.9)
+    control = list(adapt_delta = 0.95)
   )
   return(list(fitted_model = temp, loo = loo_output, prior_model = prior_model))
 }
@@ -945,7 +945,7 @@ model_search <- function(data, draws, holdout, seed, cores, output) {
 #'
 #' Rscript assignment_2.R --file BostonHousing.RData \
 #'    --seed 42 \
-#'    --draws 10000 \
+#'    --draws 20000 \
 #'    --output . \
 #'    --cores 0 \
 #'    --holdout 0.1
@@ -963,7 +963,7 @@ option_list <- list(
   ),
   make_option(
     c("-d", "--draws"), action = "store",
-    type = "integer", default = 10000,
+    type = "integer", default = 20000,
     help = "the number of draws to run"
   ),
   make_option(
@@ -1046,11 +1046,11 @@ if (output == ".") {
 }
 
 # Assert that draws is large enough
-if (draws %% 1 != 0 || draws < 5000) {
+if (draws %% 1 != 0 || draws < 10000) {
   error(
     logger,
     msg = paste(
-      "please use am integer larger than 5000, ",
+      "please use am integer larger than 10000, ",
       draws,
       " does not conform to this",
       sep = ""
