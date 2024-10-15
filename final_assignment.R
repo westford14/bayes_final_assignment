@@ -61,6 +61,9 @@ if (!("projpred" %in% pkgs)) install.packages(
 if (!("doRNG" %in% pkgs)) install.packages(
   "doRNG", repos = "https://cloud.r-project.org"
 )
+if (!("reshape2" %in% pkgs)) install.packages(
+  "reshape2", repos = "https://cloud.r-project.org"
+)
 
 # Load the packages and suppress the incoming warnings
 # and other messages that get logged out.
@@ -84,6 +87,7 @@ suppressPackageStartupMessages(library(parallel))
 suppressPackageStartupMessages(library(rsample))
 suppressPackageStartupMessages(library(projpred))
 suppressPackageStartupMessages(library(doRNG))
+suppressPackageStartupMessages(library(reshape2))
 
 # Create a logging module for better viewing of messages
 # and various other alerts.
@@ -322,7 +326,7 @@ create_priors_and_formula <- function(best_variables) {
       priors <- append(
         priors,
         set_prior(
-          "normal(0, 10)",
+          "student_t(3, 0, 50)",
           class = "b",
           coef = best_variables[x]
         )
@@ -331,7 +335,7 @@ create_priors_and_formula <- function(best_variables) {
       priors <- append(
         priors,
         set_prior(
-          "normal(0, 10)",
+          "student_t(3, 0, 50)",
           class = "b",
           coef = paste("s", best_variables[x], "_1", sep = "")
         )
@@ -543,26 +547,11 @@ run_single_model <- function(specification_list, draws, data, seed) {
     cores = 1,
     iter = draws,
     prior = specification_list$priors,
-    control = list(adapt_delta = 0.95)
+    control = list(adapt_delta = 0.95),
+    sample_prior = "yes"
   )
   loo_output <- loo::loo(temp)
-
-  info(
-    logger,
-    msg = "sampling the prior"
-  )
-  prior_model <- brm(
-    bf(specification_list$formula),
-    data = data$train,
-    family = "gaussian",
-    seed = seed,
-    cores = 1,
-    iter = draws,
-    sample_prior = "only",
-    prior = specification_list$priors,
-    control = list(adapt_delta = 0.95)
-  )
-  return(list(fitted_model = temp, loo = loo_output, prior_model = prior_model))
+  return(list(fitted_model = temp, loo = loo_output))
 }
 
 #' Code to generate the diagnostics and plots.  This will also generate
@@ -647,24 +636,36 @@ generate_diagnostics <- function(model, data, output) {
 
   info(
     logger,
-    msg = "generating prior probability plot"
+    msg = "creating posterior and prior overlays"
   )
-  prior_pc <- pp_check(
-    model$prior_model,
-    ndraws = 1000,
-    type = "stat",
-    stat = "mean"
-  )
-  ggsave(
-    paste(
-      output,
-      diagnostics_folder,
-      paste(model$name, "_prior_pc_mean.png", sep = ""),
-      sep = "/"
-    ),
-    bg = "white",
-    plot = prior_pc
-  )
+  prior_pulls <- data.frame(prior_draws(model$fitted_model))
+  posterior_pulls <- as_draws_df(model$fitted_model)
+
+  for (col in colnames(posterior_pulls)) {
+    if (!(col %in% colnames(prior_pulls))) {
+      next
+    }
+    frame <- cbind(select(prior_pulls, col), select(posterior_pulls, col))
+    colnames(frame) <- c(
+      paste(col, "_prior", sep = ""),
+      paste(col, "_posterior", sep = "")
+    )
+    melted <- melt(frame)
+    prior_post_comp_plot <- ggplot(
+      melted,
+      aes(x = value, fill = variable)
+    ) + geom_density(alpha = 0.25) + xlim(-50, 50)
+    ggsave(
+      paste(
+        output,
+        diagnostics_folder,
+        paste(model$name, "_", col, "_prior_post_comp.png", sep = ""),
+        sep = "/"
+      ),
+      bg = "white",
+      plot = prior_post_comp_plot
+    )
+  }
 
   conditional_plots <- plot(
     conditional_effects(model$fitted_model),
@@ -770,24 +771,24 @@ model_search <- function(data, draws, holdout, seed, cores, output) {
     base_linear = list(
       formula = "medv ~ rm + lstat",
       priors = c(
-        set_prior("normal(0, 10)", class = "b", coef = "lstat"),
-        set_prior("normal(0, 10)", class = "b", coef = "rm")
+        set_prior("student_t(3, 0, 50)", class = "b", coef = "lstat"),
+        set_prior("student_t(3, 0, 50)", class = "b", coef = "rm")
       )
     ),
     all_features = list(
       formula = "medv ~ s(crim) + s(zn) + s(indus) + chas + s(nox) + rm + s(age) + s(dis) + rad + s(tax) + s(ptratio) + lstat",
       priors = c(
-        set_prior("normal(0, 10)", class = "b", coef = "scrim_1"),
-        set_prior("normal(0, 10)", class = "b", coef = "szn_1"),
-        set_prior("normal(0, 10)", class = "b", coef = "sindus_1"),
-        set_prior("normal(0, 10)", class = "b", coef = "snox_1"),
-        set_prior("normal(0, 10)", class = "b", coef = "rm"),
-        set_prior("normal(0, 10)", class = "b", coef = "sage_1"),
-        set_prior("normal(0, 10)", class = "b", coef = "sdis_1"),
-        set_prior("normal(0, 10)", class = "b", coef = "rad"),
-        set_prior("normal(0, 10)", class = "b", coef = "stax_1"),
-        set_prior("normal(0, 10)", class = "b", coef = "sptratio_1"),
-        set_prior("normal(0, 10)", class = "b", coef = "lstat")
+        set_prior("student_t(3, 0, 50)", class = "b", coef = "scrim_1"),
+        set_prior("student_t(3, 0, 50)", class = "b", coef = "szn_1"),
+        set_prior("student_t(3, 0, 50)", class = "b", coef = "sindus_1"),
+        set_prior("student_t(3, 0, 50)", class = "b", coef = "snox_1"),
+        set_prior("student_t(3, 0, 50)", class = "b", coef = "rm"),
+        set_prior("student_t(3, 0, 50)", class = "b", coef = "sage_1"),
+        set_prior("student_t(3, 0, 50)", class = "b", coef = "sdis_1"),
+        set_prior("student_t(3, 0, 50)", class = "b", coef = "rad"),
+        set_prior("student_t(3, 0, 50)", class = "b", coef = "stax_1"),
+        set_prior("student_t(3, 0, 50)", class = "b", coef = "sptratio_1"),
+        set_prior("student_t(3, 0, 50)", class = "b", coef = "lstat")
       )
     ),
     feature_selected_projection = list(
@@ -861,7 +862,6 @@ model_search <- function(data, draws, holdout, seed, cores, output) {
     )
     return(list(list(
       "fitted_model" = output$fitted_model,
-      "prior_model" = output$prior_model,
       "formula" = models[[i]]$formula,
       "name" = names(models)[i],
       "loo" = output$loo
@@ -889,9 +889,6 @@ model_search <- function(data, draws, holdout, seed, cores, output) {
   dir.create(file.path(output, bayes_model_folder), showWarnings = FALSE)
   write.csv(compared, paste(output, bayes_model_folder, "loo.csv", sep = "/"))
 
-  freq_model_folder <- "prior_models"
-  dir.create(file.path(output, freq_model_folder), showWarnings = FALSE)
-
   info(
     logger,
     msg = "saving models (bayes and priors)"
@@ -904,11 +901,6 @@ model_search <- function(data, draws, holdout, seed, cores, output) {
     )
     saveRDS(model$fitted_model, file = bayes_path)
 
-    freq_path <- paste(
-      output, freq_model_folder, paste(model$name, ".rds", sep = ""),
-      sep = "/"
-    )
-    saveRDS(model$prior_model, file = freq_path)
     sum_stats <- generate_diagnostics(model, full_data, output)
     sum_stats_models <- rbind(sum_stats_models, data.frame(sum_stats))
     info(
@@ -945,7 +937,7 @@ model_search <- function(data, draws, holdout, seed, cores, output) {
 #'
 #' Rscript assignment_2.R --file BostonHousing.RData \
 #'    --seed 42 \
-#'    --draws 20000 \
+#'    --draws 30000 \
 #'    --output . \
 #'    --cores 0 \
 #'    --holdout 0.1
@@ -963,7 +955,7 @@ option_list <- list(
   ),
   make_option(
     c("-d", "--draws"), action = "store",
-    type = "integer", default = 20000,
+    type = "integer", default = 10000,
     help = "the number of draws to run"
   ),
   make_option(
@@ -1046,11 +1038,11 @@ if (output == ".") {
 }
 
 # Assert that draws is large enough
-if (draws %% 1 != 0 || draws < 10000) {
+if (draws %% 1 != 0 || draws < 5000) {
   error(
     logger,
     msg = paste(
-      "please use am integer larger than 10000, ",
+      "please use am integer larger than 5000, ",
       draws,
       " does not conform to this",
       sep = ""
