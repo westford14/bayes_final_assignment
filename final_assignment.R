@@ -90,6 +90,17 @@ suppressPackageStartupMessages(library(doRNG))
 logger <- logger(appenders = console_appender(logfmt_log_layout()))
 info(logger, "Starting processing")
 
+#' Utility function for unregistering parallel computing
+#' when setting up and tearing down a dopar.
+unregister_dopar <- function() {
+  info(
+    logger,
+    msg = "clearing out dopar variables"
+  )
+  env <- foreach:::.foreachGlobals
+  rm(list = ls(name = env), pos = env)
+}
+
 #' Utility function to create all figures needed for
 #' the data analysis.
 #'
@@ -298,86 +309,12 @@ train_test_split <- function(data, holdout = 0.1) {
   return(list(train = train, test = test))
 }
 
-#' Use a gradient boosted tree library to run feature selection
-#' in our feature space given we have 12 variables to choose from.
-#' We will maintain highly correlated variables in the model, but
-#' from the rest, we will search using feature importance cutoffs
-#' in the decision tree.
+#' Generate a formula and priors based on a vector of
+#' variables.
 #'
-#' @param data (data.frame) the data to fit the model
-#' @param output (character) path to the output
-#' @return list(features=c(), variables=c(), priors=c())
-feature_selection <- function(data, output, seed, draws, cores) {
-  info(
-    logger,
-    msg = "fitting model for feature selection",
-    cores = cores,
-    seed = seed
-  )
-  feature_model <- brm(
-    formula = "medv ~ (.)",
-    family = "gaussian",
-    data = data,
-    seed = seed,
-    iter = draws,
-    cores = cores
-  )
-
-  # Create a cluster of `cores` size
-  cl <- makeCluster(cores, outfile = "")
-  registerDoSNOW(cl)
-
-  info(
-    logger,
-    msg = "running parallel feature selection",
-    cores = cores,
-    seed = seed
-  )
-  # limiting the space to speed up computation time
-  cvs <- cv_varsel(
-    feature_model,
-    refit_prj = FALSE,
-    nclusters = 5,
-    parallel = TRUE,
-    seed = seed
-  )
-
-  # Kill the cluster
-  stopCluster(cl)
-  info(
-    logger,
-    msg = "parallel feature selection run completed!"
-  )
-
-  varsel_plot <- plot(cvs, stats = c("elpd", "rmse"))
-
-  info(
-    logger,
-    msg = "generating feature selection plots ..."
-  )
-  feature_folder <- "feature_selection"
-  dir.create(file.path(output, feature_folder), showWarnings = FALSE)
-
-  suggested_size <- suggest_size(cvs)
-  best_variables <- ranking(cvs)$fulldata[1:suggested_size]
-
-  png(
-    filename = paste(
-      output,
-      feature_folder,
-      "varsel_plot.png",
-      sep = "/"
-    )
-  )
-  plot(varsel_plot)
-  dev.off()
-
-  info(
-    logger,
-    msg = "found best subset of features",
-    features = best_variables
-  )
-
+#' @param best_variables (vector) a vector of variables
+#' @return list(formula=, priors=c())
+create_priors_and_formula <- function(best_variables) {
   form <- "medv ~ "
   priors <- c()
   for (x in seq_along(best_variables)) {
@@ -437,10 +374,140 @@ feature_selection <- function(data, output, seed, draws, cores) {
       collapse = " "
     )
   )
-  return(list(
-    formula = form,
-    priors = priors
-  ))
+  return(list(formula = form, priors = priors))
+}
+
+#' Use a projection based method to assess the feature
+#' importance for modelling. We are restricting the space
+#' that the feature importance looks to improve speed and
+#' overall performance.
+#'
+#' @param data (data.frame) the data to fit the model
+#' @param output (character) path to the output
+#' @return list(features=c(), priors=c())
+feature_selection_projection <- function(data, output, seed, draws, cores) {
+  info(
+    logger,
+    msg = "fitting model for feature selection",
+    cores = cores,
+    seed = seed
+  )
+  feature_model <- brm(
+    formula = "medv ~ (.)",
+    family = "gaussian",
+    data = data,
+    seed = seed,
+    iter = draws,
+    cores = cores
+  )
+
+  # Create a cluster of `cores` size
+  cl <- makeCluster(cores, outfile = "")
+  registerDoSNOW(cl)
+
+  info(
+    logger,
+    msg = "running parallel feature selection",
+    cores = cores,
+    seed = seed
+  )
+  # limiting the space to speed up computation time
+  cvs <- cv_varsel(
+    feature_model,
+    refit_prj = FALSE,
+    nclusters = 5,
+    parallel = TRUE,
+    seed = seed
+  )
+
+  # Kill the cluster
+  stopCluster(cl)
+  info(
+    logger,
+    msg = "parallel feature selection run completed!"
+  )
+  unregister_dopar()
+
+  varsel_plot <- plot(cvs, stats = c("elpd", "rmse"))
+
+  info(
+    logger,
+    msg = "generating feature selection plots ..."
+  )
+  feature_folder <- "feature_selection"
+  dir.create(file.path(output, feature_folder), showWarnings = FALSE)
+
+  suggested_size <- suggest_size(cvs)
+  best_variables <- ranking(cvs)$fulldata[1:suggested_size]
+
+  png(
+    filename = paste(
+      output,
+      feature_folder,
+      "varsel_projection_plot.png",
+      sep = "/"
+    )
+  )
+  plot(varsel_plot)
+  dev.off()
+
+  info(
+    logger,
+    msg = "found best subset of features (projection)",
+    features = best_variables
+  )
+
+  output <- create_priors_and_formula(best_variables)
+  return(output)
+}
+
+#' Use recursive feature elimination for feature selection
+#' to determine features to use for modelling.
+#'
+#' @param data (data.frame) the data to fit the model
+#' @param output (character) path to the output
+#' @return list(features=c(), priors=c())
+feature_selection_rfe <- function(data, output) {
+  info(
+    logger,
+    msg = "running rfe feature selection"
+  )
+  rfe_control <- rfeControl(functions = rfFuncs, method = "cv")
+  results <- rfe(
+    x = subset(data, select = -c(medv)),
+    y = data$medv,
+    sizes = seq_len(ncol(subset(data, select = -c(medv)))),
+    rfeControl = rfe_control
+  )
+
+  feature_folder <- "feature_selection"
+  dir.create(file.path(output, feature_folder), showWarnings = FALSE)
+
+  png(
+    filename = paste(
+      output,
+      feature_folder,
+      "rfe_selection_plot.png",
+      sep = "/"
+    )
+  )
+  plot(results, type = c("g", "o"))
+  dev.off()
+
+  suggested_size <- results$optsize
+  selected_vars <- results$variables
+  best_variables <- results$control$functions$selectVar(
+    selected_vars,
+    suggested_size
+  )
+
+  info(
+    logger,
+    msg = "found best subset of features (rfe)",
+    features = best_variables
+  )
+  output <- create_priors_and_formula(best_variables)
+  return(output)
 }
 
 #' Utility function used by the parallel call to run a single model
@@ -690,7 +757,15 @@ generate_diagnostics <- function(model, data, output) {
 #'            name=var_name_of_model
 #'          )
 model_search <- function(data, draws, holdout, seed, cores, output) {
-  selected_features <- feature_selection(data, output, seed, draws / 2, cores)
+  selected_features_projection <- feature_selection_projection(
+    data,
+    output,
+    seed,
+    draws / 2,
+    cores
+  )
+  selected_features_rfe <- feature_selection_rfe(data, output)
+
   models <- list(
     base_linear = list(
       formula = "medv ~ rm + lstat",
@@ -715,9 +790,13 @@ model_search <- function(data, draws, holdout, seed, cores, output) {
         set_prior("normal(0, 10)", class = "b", coef = "lstat")
       )
     ),
-    feature_selected = list(
-      formula = selected_features$formula,
-      priors = selected_features$priors
+    feature_selected_projection = list(
+      formula = selected_features_projection$formula,
+      priors = selected_features_projection$priors
+    ),
+    feature_selected_rfe = list(
+      formula = selected_features_rfe$formula,
+      priors = selected_features_rfe$priors
     )
   )
 
@@ -795,6 +874,7 @@ model_search <- function(data, draws, holdout, seed, cores, output) {
     logger,
     msg = "parallel run completed!"
   )
+  unregister_dopar()
 
   # Find the best fitted model
   fitted_models <- list()
