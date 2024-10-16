@@ -96,6 +96,8 @@ info(logger, "Starting processing")
 
 #' Utility function for unregistering parallel computing
 #' when setting up and tearing down a dopar.
+#'
+#' No parameters and no return values.
 unregister_dopar <- function() {
   info(
     logger,
@@ -280,7 +282,7 @@ create_data_analysis <- function(path, output) {
   return(censored_housing)
 }
 
-#' Function that train test splits the data based on a holdout
+#' Function that train, test splits the data based on a holdout
 #' percentage.  This is used to generate priors and assess the
 #' overall model fit.
 #'
@@ -953,6 +955,7 @@ option_list <- list(
     type = "integer", default = 42,
     help = "the random seed to set for analysis"
   ),
+  # see the README.md for further discussion on default draw value
   make_option(
     c("-d", "--draws"), action = "store",
     type = "integer", default = 10000,
@@ -1064,6 +1067,7 @@ if (grepl("Rdata", file, fixed = TRUE)) {
   stop()
 }
 
+# prevent a silly `Rplot.pdf` file from being created
 pdf(NULL)
 info(
   logger,
