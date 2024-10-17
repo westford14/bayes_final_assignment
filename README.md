@@ -134,23 +134,24 @@ The folders created are summarized below:
 
 ## Prior Selection and Model Analysis
 
-When we first worked with the data, we set priors akin to `normal(0, 10)` because we did
-not have many ideas of what the parameter effect sizes would be. Once we fit an initial
-model, we noticed that many of the parameters had effect sizes that were larger than our
-set standard deviation of `10`. To accomodate for this, we changed our priors to be wide
-`student_t(3, 0, 50)` distributions. These priors might be very wide, but we were justified
-in choosing these as our posterior distributions were then able to extend to very different
-areas of space (-60 in one example) [A more detailed analysis of this can be found in the
-poster presentation where we show the overlap of the posterior and prior density functions
-to show that our selection of priors was justified.]. We decided to use the standard priors
-for the `sigma` and `Intercept` values as we did not have any prior knowledge of the data
-and could not find good literature to suggest a starting point there.
+We initially set weakly informative `normal(0, 10)` priors on the `β` coefficients, 
+as we had no strong prior expectations about the size of their effects. However, after fitting
+an initial model, we observed that many of the effect sizes exceeded our set standard deviation
+of `10` and were thus constrained by the priors. To address this, we changed the priors to wider
+`student t(3, 0, 50)` priors. Although these priors seem quite diffuse, this choice was justified
+because it allowed the posterior distributions to extend to a wider range of values (-60 in one example).
+[A more detailed analysis of this can be found in the poster presentation where we show the overlap of
+the posterior and prior density functions to show that our selection of priors was justified.]. 
+We also decided to use the default priors of `brms` for the `sigma`, `intercept` and `smooth components`
+as we did not have any prior knowledge of these parameters and could not find good literature to 
+inform starting priors. 
 
-This is also coupled with us using non-standard parameters when we fit our `brm` model. We
-allowed the model to use `10,000` draws and warm-up for `5,000` of those draws.  This
-was due to our seeing that the `R-hat` and `ESS` were not at ideal values on shorter chains,
-so we increased our chain size to `10,000` draws.  To also mitigate this issue, we chose a
-larger `adapt_delta` size to ensure that our model samples more efficiently.
+This is also coupled with us using non-default parameters when we fit our `brm` model. 
+The initial model showed poor convergence, indicated by a high `R-hat` statistic, low effective
+sample sizes (`ESS`), and a considerable amount of divergent transitions – all threatening the 
+validity of our results. To improve convergence, we increased the number of iterations to
+`10,000` draws with `5,000` warmup draws and also set a smaller step size (`adapt_delta = 0.95`)
+to further ensure the robustness of our analysis.
 
 ### Maintainers
 
