@@ -325,14 +325,25 @@ create_priors_and_formula <- function(best_variables) {
   priors <- c()
   for (x in seq_along(best_variables)) {
     if (best_variables[x] %in% c("chas", "rad", "lstat", "rm")) {
-      priors <- append(
-        priors,
-        set_prior(
-          "student_t(3, 0, 50)",
-          class = "b",
-          coef = best_variables[x]
+      if (best_variables[x] == "chas") {
+        priors <- append(
+          priors,
+          set_prior(
+            "student_t(3, 0, 50)",
+            class = "b",
+            coef = "chas1"
+          )
         )
-      )
+      } else {
+        priors <- append(
+          priors,
+          set_prior(
+            "student_t(3, 0, 50)",
+            class = "b",
+            coef = best_variables[x]
+          )
+        )
+      }
     } else {
       priors <- append(
         priors,
@@ -771,10 +782,12 @@ model_search <- function(data, draws, holdout, seed, cores, output) {
 
   models <- list(
     base_linear = list(
-      formula = "medv ~ rm + lstat",
+      formula = "medv ~ rm + lstat + chas + rad",
       priors = c(
         set_prior("student_t(3, 0, 50)", class = "b", coef = "lstat"),
-        set_prior("student_t(3, 0, 50)", class = "b", coef = "rm")
+        set_prior("student_t(3, 0, 50)", class = "b", coef = "rm"),
+        set_prior("student_t(3, 0, 50)", class = "b", coef = "chas1"),
+        set_prior("student_t(3, 0, 50)", class = "b", coef = "rad")
       )
     ),
     all_features = list(
@@ -790,7 +803,8 @@ model_search <- function(data, draws, holdout, seed, cores, output) {
         set_prior("student_t(3, 0, 50)", class = "b", coef = "rad"),
         set_prior("student_t(3, 0, 50)", class = "b", coef = "stax_1"),
         set_prior("student_t(3, 0, 50)", class = "b", coef = "sptratio_1"),
-        set_prior("student_t(3, 0, 50)", class = "b", coef = "lstat")
+        set_prior("student_t(3, 0, 50)", class = "b", coef = "lstat"),
+        set_prior("student_t(3, 0, 50)", class = "b", coef = "chas1")
       )
     ),
     feature_selected_projection = list(
