@@ -152,6 +152,26 @@ was due to our seeing that the `R-hat` and `ESS` were not at ideal values on sho
 so we increased our chain size to `10,000` draws.  To also mitigate this issue, we chose a
 larger `adapt_delta` size to ensure that our model samples more efficiently.
 
+We initially set weakly informative `normal(0, 10)` priors on the `β` coefficients, 
+as we had no strong prior expectations about the size of their effects. However, after fitting
+an initial model, we observed that many of the effect sizes exceeded our set standard deviation
+of `10` and were thus constrained by the priors. To address this, we changed the priors to wider
+`student t(3, 0, 50)` priors. Although these priors seem quite diffuse, this choice was justified
+because it allowed the posterior distributions to extend to a wider range of values (-60 in one example).
+[A more detailed analysis of this can be found in the poster presentation where we show the overlap of
+the posterior and prior density functions to show that our selection of priors was justified.]. 
+We also decided to use the default priors of `brms` for the `sigma`, `intercept` and `smooth components`
+as we did not have any prior knowledge of these parameters and could not find good literature to 
+inform starting priors. 
+
+This is also coupled with us using non-default parameters when we fit our `brm` model. 
+The initial model showed poor convergence, indicated by a high `R-hat` statistic, low effective
+sample sizes (`ESS`), and a considerable amount of divergent transitions – all threatening the 
+validity of our results. To improve convergence, we increased the number of iterations to
+`10,000` draws with `5,000` warmup draws and also set a smaller step size (`adapt_delta = 0.95`)
+to further ensure the robustness of our analysis.
+
+
 ### Maintainers
 
 * Alex Lee (1586432)
