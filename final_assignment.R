@@ -154,6 +154,33 @@ create_data_analysis <- function(path, output) {
 
   info(
     logger,
+    msg = "generating a density comparison plot"
+  )
+  compare_plot <- ggplot() +
+    geom_density(
+      aes(medv, fill = "noncensored"),
+      alpha = 0.4,
+      data = cleaned_housing) +
+    geom_density(
+      aes(medv, fill = "censored"),
+      alpha = 0.4,
+      data = censored_housing) +
+    scale_fill_manual(
+      name = "dataset",
+      values = c(noncensored = "red", censored = "blue")
+    )
+  ggsave(
+    paste(
+      output,
+      analysis_folder,
+      "comparison_plot.png",
+      sep = "/"
+    ),
+    plot = compare_plot
+  )
+
+  info(
+    logger,
     msg = "testing linearity ..."
   )
   qq <- qqnorm(censored_housing$medv)
